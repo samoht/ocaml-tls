@@ -91,7 +91,10 @@ module Unix = struct
     | `Write_closed _, (`read | `read_write) -> `Closed
     | (`Closed | `Error _) as e, (`read | `write | `read_write) -> e
 
-  let inject_state tls = function
+  let inject_state tls state =
+    let state = if Tls.Engine.read_closed tls then half_close state `read else state in
+    let state = if Tls.Engine.write_closed tls then half_close state `write else state in
+    match state with
     | `Active _ -> `Active tls
     | `Read_closed _ -> `Read_closed tls
     | `Write_closed _ -> `Write_closed tls
@@ -123,10 +126,8 @@ module Unix = struct
 
     let handle tls buf =
       match Tls.Engine.handle_tls tls buf with
-      | Ok (state', eof, `Response resp, `Data data) ->
-          let state' = inject_state state' t.state in
-          let state' = Option.(value ~default:state' (map (fun `Eof -> half_close state' `read) eof)) in
-          t.state <- state' ;
+      | Ok (state', _eof, `Response resp, `Data data) ->
+          t.state <- inject_state state' t.state ;
           safely (resp |> when_some (write_t t)) >|= fun () ->
           `Ok data
 
@@ -241,7 +242,7 @@ module Unix = struct
        match t.state with
        | `Active tls | `Read_closed tls ->
          let tls', buf = Tls.Engine.send_close_notify tls in
-         t.state <- inject_state tls' (half_close t.state `write) ;
+         t.state <- inject_state tls' t.state ;
          write_t t buf
        | _ -> Lwt.return_unit) >>= fun () ->
     t.state <- half_close t.state mode;
