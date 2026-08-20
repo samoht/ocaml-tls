@@ -547,6 +547,10 @@ let handshake_in_progress s = match s.handshake.machina with
   | Client13 Established13 | Server13 Established13 -> false
   | _ -> true
 
+let read_closed s = s.read_closed
+
+let write_closed s = s.write_closed
+
 (* entry for user data *)
 let send_application_data st css =
   if st.write_closed || not (hs_can_handle_appdata st.handshake) then

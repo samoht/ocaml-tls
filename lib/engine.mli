@@ -128,6 +128,16 @@ val handle_tls           : state -> string -> ret
     is a handshake in progress or scheduled. *)
 val handshake_in_progress : state -> bool
 
+(** [read_closed state] is [true] if a "close_notify" alert has been received:
+    the peer will send no more messages on this connection. *)
+val read_closed           : state -> bool
+
+(** [write_closed state] is [true] if {!send_close_notify} has sent this side's
+    "close_notify" alert. As RFC 8446, Section 6.1 (Closure Alerts) puts it,
+    that closes the write side of the connection and "does not have any effect
+    on its read side". *)
+val write_closed          : state -> bool
+
 (** [send_application_data tls outs] is [Some (tls', out)] where
     [tls'] is the new tls state, and [out] the cstruct to send over the
     wire (encrypted [outs]) when the TLS session is ready. When the TLS
