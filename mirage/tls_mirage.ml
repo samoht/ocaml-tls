@@ -41,7 +41,10 @@ module Make (F : Mirage_flow.S) = struct
     | `Write_closed _, (`read | `read_write) -> `Closed
     | (`Closed | `Error _) as e, (`read | `write | `read_write) -> e
 
-  let inject_state tls = function
+  let inject_state tls state =
+    let state = if Tls.Engine.read_closed tls then half_close state `read else state in
+    let state = if Tls.Engine.write_closed tls then half_close state `write else state in
+    match state with
     | `Active _ -> `Active tls
     | `Read_closed _ -> `Read_closed tls
     | `Write_closed _ -> `Write_closed tls
@@ -63,10 +66,8 @@ module Make (F : Mirage_flow.S) = struct
   let read_react flow =
     let handle tls buf =
       match Tls.Engine.handle_tls tls buf with
-      | Ok (state, eof, `Response resp, `Data data) ->
-        let state = inject_state state flow.state in
-        let state = Option.(value ~default:state (map (fun `Eof -> half_close state `read) eof)) in
-        flow.state <- state;
+      | Ok (state, _eof, `Response resp, `Data data) ->
+        flow.state <- inject_state state flow.state;
         ( match resp with
           | None     -> Lwt.return @@ Ok ()
           | Some buf -> write_flow flow buf) >>= fun _ ->
