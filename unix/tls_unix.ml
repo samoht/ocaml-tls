@@ -49,7 +49,10 @@ let half_close state mode =
   | `Write_closed _, (`read | `read_write) -> `Closed
   | ((`Closed | `Error _) as e), (`read | `write | `read_write) -> e
 
-let inject_state tls = function
+let inject_state tls state =
+  let state = if Tls.Engine.read_closed tls then half_close state `read else state in
+  let state = if Tls.Engine.write_closed tls then half_close state `write else state in
+  match state with
   | `Active _ -> `Active tls
   | `Read_closed _ -> `Read_closed tls
   | `Write_closed _ -> `Write_closed tls
@@ -76,11 +79,9 @@ let write flow str =
 
 let handle flow tls str =
   match Tls.Engine.handle_tls tls str with
-  | Ok (state, eof, `Response resp, `Data data) ->
+  | Ok (state, _eof, `Response resp, `Data data) ->
       Log.debug (fun m -> m "We handled %d byte(s)" (String.length str));
-      let state = inject_state state flow.state in
-      let state = Option.(value ~default:state (map (fun `Eof -> half_close state `read) eof)) in
-      flow.state <- state;
+      flow.state <- inject_state state flow.state;
       let to_close = flow.state = `Closed in
       Option.iter (inhibit $ write flow) resp;
       (* NOTE(dinosaure): [write flow] can set [flow.state]. So we must
